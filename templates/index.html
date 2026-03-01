@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 股票分析平台 - 量化分析 & AI 辩论</title>
+    <meta name="description" content="专业股票分析平台，提供K线图、压力位/支撑位、PE估值、AI多角色辩论分析">
+
+    <!-- ECharts (本地) -->
+    <script src="/static/lib/echarts.min.js"></script>
+    <!-- Marked.js (本地) -->
+    <script src="/static/lib/marked.min.js"></script>
+
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <!-- ===== 顶部导航栏 ===== -->
+    <header class="top-nav" id="topNav">
+        <div class="nav-brand">
+            <span class="brand-icon">📊</span>
+            <span class="brand-text">Q-Limit</span>
+        </div>
+        <div class="search-container" id="searchContainer">
+            <div class="search-box">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="m21 21-4.35-4.35" />
+                </svg>
+                <input type="text" id="stockSearch" placeholder="搜索股票代码或名称..." autocomplete="off">
+                <kbd class="search-kbd">/</kbd>
+            </div>
+            <div class="search-results" id="searchResults"></div>
+        </div>
+        <div class="nav-stock-info" id="navStockInfo">
+            <span class="stock-name" id="headerStockName">--</span>
+            <span class="stock-code" id="headerStockCode"></span>
+            <span class="stock-price" id="headerStockPrice">--</span>
+            <span class="stock-change" id="headerStockChange">--</span>
+            <button class="btn-refresh-header" id="btnRefreshHeader" title="刷新行情">🔄</button>
+            <!-- 公司信息悬浮提示 -->
+            <div class="company-tooltip" id="companyTooltip">
+                <div class="tooltip-header">
+                    <img class="tooltip-logo" id="tooltipLogo" src="" alt="">
+                    <div class="tooltip-title">
+                        <div class="tooltip-name" id="tooltipName">--</div>
+                        <div class="tooltip-industry" id="tooltipIndustry">--</div>
+                    </div>
+                </div>
+                <div class="tooltip-intro" id="tooltipIntro">--</div>
+                <div class="tooltip-profile" id="tooltipProfile">--</div>
+                <div class="tooltip-meta">
+                    <span id="tooltipWebpage"></span>
+                </div>
+            </div>
+        </div>
+        <div class="nav-actions">
+            <button class="btn-icon theme-toggle" id="btnThemeToggle" title="切换主题">
+                <span class="theme-icon-dark">🌙</span>
+                <span class="theme-icon-light" style="display:none">☀️</span>
+            </button>
+            <button class="btn-icon" id="btnSettings" title="AI模型设置">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path
+                        d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                    <circle cx="12" cy="12" r="3" />
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- ===== 大盘指数滚动条 ===== -->
+    <div class="market-ticker" id="marketTicker">
+        <div class="ticker-track" id="tickerTrack">
+            <span class="ticker-loading">加载指数数据中...</span>
+        </div>
+    </div>
+
+    <!-- ===== 自选股栏 ===== -->
+    <div class="watchlist-bar" id="watchlistBar">
+        <div class="watchlist-scroll" id="watchlistScroll">
+            <div class="watchlist-empty" id="watchlistEmpty">
+                <span>⭐</span> 搜索股票后点击 <strong>+</strong> 添加到自选
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 主工作区 ===== -->
+    <main class="workspace" id="workspace">
+        <!-- 欢迎页面（无股票选中时） -->
+        <div class="welcome-screen" id="welcomeScreen">
+            <div class="welcome-content">
+                <div class="welcome-icon">📈</div>
+                <h1>开始分析</h1>
+                <p>在顶部搜索框输入股票代码或名称，选择一只股票开始分析</p>
+                <div class="welcome-features">
+                    <div class="feature-card">
+                        <span class="feature-icon">📐</span>
+                        <span class="feature-label">压力/支撑位</span>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-icon">💰</span>
+                        <span class="feature-label">PE/PB 估值</span>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-icon">📰</span>
+                        <span class="feature-label">消息面资讯</span>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-icon">📑</span>
+                        <span class="feature-label">财报分析</span>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-icon">🤖</span>
+                        <span class="feature-label">AI 辩论</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 分析工作区（选中股票后） -->
+        <div class="analysis-workspace" id="analysisWorkspace" style="display:none;">
+            <!-- 左侧：图表区 -->
+            <div class="chart-section">
+                <!-- K线图 -->
+                <div class="panel chart-panel">
+                    <div class="panel-header">
+                        <h2>K线图表</h2>
+                        <div class="panel-actions">
+                            <div class="period-selector">
+                                <!-- 交易时段下拉 -->
+                                <div class="period-dropdown" id="sessionDropdown">
+                                    <button class="period-btn dropdown-trigger" id="sessionBtn">
+                                        <span id="sessionLabel">盘后</span>
+                                        <svg width="10" height="6" viewBox="0 0 10 6">
+                                            <path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5"
+                                                fill="none" />
+                                        </svg>
+                                    </button>
+                                    <div class="dropdown-menu" id="sessionMenu">
+                                        <div class="dropdown-item" data-session="night" data-period="timeshare">夜盘</div>
+                                        <div class="dropdown-item" data-session="pre" data-period="timeshare">盘前</div>
+                                        <div class="dropdown-item" data-session="mid" data-period="timeshare">盘中</div>
+                                        <div class="dropdown-item active" data-session="post" data-period="timeshare">盘后
+                                        </div>
+                                        <div class="dropdown-item" data-session="all" data-period="timeshare">全部</div>
+                                    </div>
+                                </div>
+                                <button class="period-btn" data-period="5day">5日</button>
+                                <button class="period-btn active" data-period="daily">日K</button>
+                                <button class="period-btn" data-period="weekly">周K</button>
+                                <button class="period-btn" data-period="monthly">月K</button>
+                                <button class="period-btn" data-period="yearly">年K</button>
+                                <!-- 分钟K下拉 -->
+                                <div class="period-dropdown" id="minuteDropdown">
+                                    <button class="period-btn dropdown-trigger" id="minuteBtn">
+                                        <span id="minuteLabel">1分</span>
+                                        <svg width="10" height="6" viewBox="0 0 10 6">
+                                            <path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5"
+                                                fill="none" />
+                                        </svg>
+                                    </button>
+                                    <div class="dropdown-menu" id="minuteMenu">
+                                        <div class="dropdown-item active" data-period="1min">1分</div>
+                                        <div class="dropdown-item" data-period="5min">5分</div>
+                                        <div class="dropdown-item" data-period="15min">15分</div>
+                                        <div class="dropdown-item" data-period="30min">30分</div>
+                                        <div class="dropdown-item" data-period="60min">60分</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chart-container" id="klineChart"></div>
+                </div>
+
+                <!-- 股票详情信息栏 -->
+                <div class="panel stock-detail-panel" id="stockDetailPanel" style="display:none">
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <span class="detail-label">今开</span>
+                            <span class="detail-value" id="detailOpen">--</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">最高</span>
+                            <span class="detail-value up" id="detailHigh">--</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">最低</span>
+                            <span class="detail-value down" id="detailLow">--</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">昨收</span>
+                            <span class="detail-value" id="detailPrevClose">--</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">成交量</span>
+                            <span class="detail-value" id="detailVolume">--</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">成交额</span>
+                            <span class="detail-value" id="detailTurnover">--</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">量比</span>
+                            <span class="detail-value" id="detailVolumeRate">--</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">振幅</span>
+                            <span class="detail-value" id="detailAmplitude">--</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">52周高</span>
+                            <span class="detail-value up" id="detailYearHigh">--</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">52周低</span>
+                            <span class="detail-value down" id="detailYearLow">--</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">总市值</span>
+                            <span class="detail-value" id="detailMarketCap">--</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">股息率TTM</span>
+                            <span class="detail-value" id="detailDividend">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 技术指标面板 -->
+                <div class="panel indicators-panel">
+                    <div class="panel-header">
+                        <h2>技术指标</h2>
+                        <div class="indicator-tabs">
+                            <button class="ind-tab active" data-ind="macd">MACD</button>
+                            <button class="ind-tab" data-ind="kdj">KDJ</button>
+                            <button class="ind-tab" data-ind="vol">成交量</button>
+                        </div>
+                    </div>
+                    <div class="chart-container chart-sm" id="indicatorChart"></div>
+                </div>
+            </div>
+
+            <!-- 右侧：分析面板 -->
+            <div class="analysis-section">
+                <!-- Tab 选项卡 -->
+                <div class="analysis-tabs">
+                    <button class="analysis-tab active" data-tab="support-resistance">
+                        <span class="tab-icon">📐</span>压力/支撑
+                    </button>
+                    <button class="analysis-tab" data-tab="valuation">
+                        <span class="tab-icon">💰</span>估值分析
+                    </button>
+                    <button class="analysis-tab" data-tab="news">
+                        <span class="tab-icon">📰</span>消息面
+                    </button>
+                    <button class="analysis-tab" data-tab="financial">
+                        <span class="tab-icon">📑</span>财报
+                    </button>
+                    <button class="analysis-tab" data-tab="patterns">
+                        <span class="tab-icon">🔮</span>形态预警
+                    </button>
+                    <button class="analysis-tab" data-tab="actions">
+                        <span class="tab-icon">📅</span>日程
+                    </button>
+                </div>
+
+                <!-- 压力位/支撑位面板 -->
+                <div class="tab-content active" id="tab-support-resistance">
+                    <div class="tab-panel-header">
+                        <div class="sr-current-price">
+                            <span class="sr-label">当前价格</span>
+                            <span class="sr-price" id="srCurrentPrice">--</span>
+                        </div>
+                        <button class="btn-sm btn-refresh" id="btnRefreshSR" title="刷新压力/支撑">🔄</button>
+                    </div>
+                    <div class="sr-section">
+                        <h3 class="sr-title resistance-title">🔴 压力位</h3>
+                        <div class="sr-levels" id="resistanceLevels"></div>
+                    </div>
+                    <div class="sr-section">
+                        <h3 class="sr-title support-title">🟢 支撑位</h3>
+                        <div class="sr-levels" id="supportLevels"></div>
+                    </div>
+                    <div class="sr-section">
+                        <h3 class="sr-title">📊 技术概要</h3>
+                        <div class="tech-summary" id="techSummary"></div>
+                    </div>
+                </div>
+
+                <!-- 估值分析面板 -->
+                <div class="tab-content" id="tab-valuation">
+                    <div class="tab-panel-header">
+                        <span style="font-size:12px;color:var(--text-secondary)">PE/PB 估值分析</span>
+                        <button class="btn-sm btn-refresh" id="btnRefreshValuation" title="刷新估值">🔄</button>
+                    </div>
+                    <div class="valuation-grid">
+                        <div class="val-card" id="peCard">
+                            <div class="val-header">PE 市盈率 <span class="val-desc">（股价÷每股收益）</span></div>
+                            <div class="val-value" id="peValue">--</div>
+                            <div class="val-percentile">
+                                <div class="percentile-bar">
+                                    <div class="percentile-fill" id="peFill"></div>
+                                    <div class="percentile-marker" id="peMarker"></div>
+                                </div>
+                                <div class="percentile-labels">
+                                    <span>极低</span><span>低</span><span>中</span><span>高</span><span>极高</span>
+                                </div>
+                                <span class="percentile-text" id="pePercentile">历史百分位 --</span>
+                            </div>
+                            <div class="val-status" id="peStatus">--</div>
+                        </div>
+                        <div class="val-card" id="pbCard">
+                            <div class="val-header">PB 市净率 <span class="val-desc">（股价÷每股净资产）</span></div>
+                            <div class="val-value" id="pbValue">--</div>
+                            <div class="val-percentile">
+                                <div class="percentile-bar">
+                                    <div class="percentile-fill" id="pbFill"></div>
+                                    <div class="percentile-marker" id="pbMarker"></div>
+                                </div>
+                                <div class="percentile-labels">
+                                    <span>极低</span><span>低</span><span>中</span><span>高</span><span>极高</span>
+                                </div>
+                                <span class="percentile-text" id="pbPercentile">历史百分位 --</span>
+                            </div>
+                            <div class="val-status" id="pbStatus">--</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 消息面面板 -->
+                <div class="tab-content" id="tab-news">
+                    <div class="news-header">
+                        <span class="news-count" id="newsCount"></span>
+                        <button class="btn-sm" id="btnRefreshNews" title="刷新资讯">🔄 刷新</button>
+                    </div>
+                    <div class="news-list" id="newsList">
+                        <div class="empty-state">
+                            <span class="empty-icon">📰</span>
+                            <p>暂无资讯数据</p>
+                            <p class="empty-hint">接入长桥/金十接口后将自动显示</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 财报面板 -->
+                <div class="tab-content" id="tab-financial">
+                    <div class="tab-panel-header">
+                        <span style="font-size:12px;color:var(--text-secondary)">财务报表</span>
+                        <button class="btn-sm btn-refresh" id="btnRefreshFinancial" title="刷新财报">🔄</button>
+                    </div>
+                    <div class="financial-overview" id="financialOverview">
+                        <div class="empty-state">
+                            <span class="empty-icon">📑</span>
+                            <p>加载财报数据中...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 日程公告面板 -->
+                <div class="tab-content" id="tab-actions">
+                    <div class="tab-panel-header">
+                        <span style="font-size:12px;color:var(--text-secondary)">日程 & 公告</span>
+                        <button class="btn-sm btn-refresh" id="btnRefreshActions" title="刷新日程">🔄</button>
+                    </div>
+                    <div class="actions-timeline" id="actionsTimeline">
+                        <div class="empty-state">
+                            <span class="empty-icon">📅</span>
+                            <p>加载日程数据中...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- K线形态预警面板 -->
+                <div class="tab-content" id="tab-patterns">
+                    <div class="tab-panel-header">
+                        <span style="font-size:12px;color:var(--text-secondary)">K线形态 · 趋势 · 预警</span>
+                        <button class="btn-sm btn-refresh" id="btnRefreshPatterns" title="刷新形态预警">🔄</button>
+                    </div>
+                    <div class="patterns-panel">
+                        <div class="patterns-section">
+                            <h3 class="patterns-section-title">🕯️ K线形态</h3>
+                            <div id="candlestickPatterns" class="patterns-list">
+                                <div class="empty-state"><span class="empty-icon">🕯️</span>
+                                    <p>加载中...</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="patterns-section">
+                            <h3 class="patterns-section-title">📊 趋势结构</h3>
+                            <div id="trendStructures" class="patterns-list">
+                                <div class="empty-state"><span class="empty-icon">📊</span>
+                                    <p>加载中...</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="patterns-section">
+                            <h3 class="patterns-section-title">⚠️ 假突破预警</h3>
+                            <div id="falseBreakouts" class="patterns-list">
+                                <div class="empty-state"><span class="empty-icon">⚠️</span>
+                                    <p>加载中...</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="patterns-summary" id="patternsSummary"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ===== AI 聊天浮窗 ===== -->
+    <div class="chat-widget" id="chatWidget">
+        <!-- 收起状态的悬浮按钮 -->
+        <button class="chat-toggle" id="chatToggle">
+            <span class="chat-toggle-icon">🤖</span>
+            <span class="chat-toggle-badge" id="chatBadge" style="display:none">!</span>
+        </button>
+
+        <!-- 展开的聊天窗口 -->
+        <div class="chat-window" id="chatWindow" style="display:none;">
+            <div class="chat-header">
+                <div class="chat-title">
+                    <span>🤖 AI 多角色分析</span>
+                    <span class="chat-stock" id="chatStockName"></span>
+                </div>
+                <div class="chat-header-actions">
+                    <button class="chat-hdr-btn" id="btnChatSettings" title="模型设置">⚙️</button>
+                    <button class="chat-hdr-btn" id="btnChatMinimize" title="最小化">−</button>
+                </div>
+            </div>
+
+            <!-- 角色选择栏 -->
+            <div class="chat-roles">
+                <button class="role-btn debate-btn" id="btnDebate" data-role="debate">
+                    ⚔️ 一键辩论
+                </button>
+                <button class="role-btn bull-btn active" data-role="bull">
+                    🐂 多头
+                </button>
+                <button class="role-btn bear-btn" data-role="bear">
+                    🐻 空头
+                </button>
+                <button class="role-btn judge-btn" data-role="judge">
+                    ⚖️ 裁判
+                </button>
+            </div>
+
+            <!-- 聊天消息区 -->
+            <div class="chat-messages" id="chatMessages">
+                <div class="chat-welcome-msg">
+                    <p>选择一个角色开始对话，或点击「一键辩论」让三方同时分析。</p>
+                    <p class="chat-hint">AI 会自动调用 PE分析、压力位、消息面等工具获取数据。</p>
+                </div>
+            </div>
+
+            <!-- 输入区 -->
+            <div class="chat-input-area">
+                <textarea id="chatInput" placeholder="输入分析指令，如：帮我分析一下这只股票..." rows="1"></textarea>
+                <button class="chat-send-btn" id="btnChatSend">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== AI 模型设置弹窗 ===== -->
+    <div class="modal-overlay" id="settingsModal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚙️ 全局设置</h2>
+                <button class="modal-close" id="btnCloseSettings">&times;</button>
+            </div>
+            <!-- 设置 Tab 页签 -->
+            <div class="settings-tabs">
+                <button class="settings-tab active" data-tab="display">🎨 显示设置</button>
+                <button class="settings-tab" data-tab="ai">🤖 AI 模型配置</button>
+            </div>
+            <!-- Tab: 显示设置 -->
+            <div class="settings-tab-content active" id="tabDisplay">
+                <div class="setting-group">
+                    <div class="setting-label">涨跌配色方案</div>
+                    <div class="setting-desc">选择涨跌颜色风格</div>
+                    <div class="setting-options" id="colorSchemeOptions">
+                        <label class="setting-option">
+                            <input type="radio" name="colorScheme" value="us">
+                            <span class="option-card">
+                                <span class="option-preview">
+                                    <span style="color:#00c853">▲ 涨</span>
+                                    <span style="color:#ff1744">▼ 跌</span>
+                                </span>
+                                <span class="option-name">美股风格</span>
+                                <span class="option-desc">涨绿跌红</span>
+                            </span>
+                        </label>
+                        <label class="setting-option">
+                            <input type="radio" name="colorScheme" value="cn">
+                            <span class="option-card">
+                                <span class="option-preview">
+                                    <span style="color:#ff1744">▲ 涨</span>
+                                    <span style="color:#00c853">▼ 跌</span>
+                                </span>
+                                <span class="option-name">A股风格</span>
+                                <span class="option-desc">涨红跌绿</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <!-- Tab: AI 配置 -->
+            <div class="settings-tab-content" id="tabAI">
+                <div class="modal-body" id="settingsBody">
+                    <!-- 三个角色的配置表单 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btnCancelSettings">取消</button>
+                <button class="btn btn-primary" id="btnSaveSettings">保存配置</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JS -->
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/chart.js"></script>
+    <script src="/static/js/analysis.js"></script>
+    <script src="/static/js/chat.js"></script>
+</body>
+
+</html>
