@@ -3,6 +3,7 @@
 支持长桥逆向接口搜索 + akshare K线数据
 MongoDB 离线时自动降级（只查远程API，不缓存）
 """
+import secrets
 import requests
 import akshare as ak
 import pandas as pd
@@ -186,11 +187,11 @@ def fetch_kline(code, period="daily", start_date=None, end_date=None, adjust="qf
     # 分时图走独立接口
     # kline_session(K线) → trade_session(分时) 映射
     TIMESHARE_SESSION_MAP = {
-        100: 0,    # 盘中
+        100: 0,  # 盘中
         101: 100,  # 全部
-        102: 2,    # 盘前
-        103: 3,    # 盘后
-        104: 4,    # 夜盘
+        102: 2,  # 盘前
+        103: 3,  # 盘后
+        104: 4,  # 夜盘
     }
     if period == "timeshare":
         ts = TIMESHARE_SESSION_MAP.get(int(kline_session), 100)
@@ -300,7 +301,7 @@ def _fetch_timeshare(code, market="US", product="ST", trade_session=100):
     获取当日分时图
     GET /api/forward/v5/quote/stock/timeshares
     trade_session: 0=盘中, 100=全部, 2=盘前, 3=盘后, 4=夜盘
-    
+
     API 返回结构：
     data.timeshares[] → 每天（含 date, pre_close, minutes[], trade_session）
     minutes[] → 每分钟（含 price, amount, balance, timestamp, avg_price）
@@ -446,6 +447,27 @@ def _fetch_kline_from_akshare(code, period="daily", start_date=None, end_date=No
     ak_period_map = {"daily": "daily", "weekly": "weekly", "yearly": "daily"}
     ak_period = ak_period_map.get(period, "daily")
 
+    # --------------------------------------------------------
+    # requests.get 注入 Cookie
+    # --------------------------------------------------------
+    original_get = requests.get
+
+    def patched_get(url, **kwargs):
+        # 如果是东方财富的域名，注入关键 Cookie 和 Header
+        if "eastmoney.com" in url:
+            kwargs['cookies'] = {
+                "nid18": secrets.token_hex(16)
+            }
+            if 'headers' not in kwargs:
+                kwargs['headers'] = {}
+            kwargs['headers'].update({
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Referer": "https://quote.eastmoney.com/"
+            })
+        return original_get(url, **kwargs)
+
+    requests.get = patched_get
+
     cached = []
     col = _safe_get_collection("daily_quotes")
     if col is not None:
@@ -579,8 +601,8 @@ def fetch_stock_detail(code, market="US", product="ST"):
             "change_pct": round(change_pct, 2),
 
             # 成交
-            "volume": _f(d.get("amount")),          # 成交量（股）
-            "turnover": _f(d.get("balance")),        # 成交额
+            "volume": _f(d.get("amount")),  # 成交量（股）
+            "turnover": _f(d.get("balance")),  # 成交额
             "turnover_rate": d.get("turnover_rate", "--"),
             "volume_rate": d.get("volume_rate", "--"),
 
@@ -590,7 +612,7 @@ def fetch_stock_detail(code, market="US", product="ST"):
 
             # 估值
             "eps_ttm": d.get("eps_ttm", "--"),
-            "dividend_yield": d.get("dps_rate", "--"),   # 股息率TTM
+            "dividend_yield": d.get("dps_rate", "--"),  # 股息率TTM
             "dividend_ttm": d.get("dividend_yield", "--"),  # 股息TTM
             "bps": d.get("bps", "--"),
 
@@ -769,6 +791,7 @@ def fetch_company_info(code, market="US", product="ST"):
 # ============================================================
 LB_COMPANY_ACT_URL = "https://m.lbkrs.com/api/forward/v2/stock-info/companyact"
 
+
 def fetch_company_actions(code, market="US", product="ST"):
     """
     获取公司日程/公告（分红派息、拆股等）
@@ -798,3 +821,4 @@ def fetch_company_actions(code, market="US", product="ST"):
     except Exception as e:
         print(f"[stock_data] 获取日程数据失败: {e}")
         return []
+
